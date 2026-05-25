@@ -18,6 +18,7 @@ import {
   setEmoji as setEmojiAction,
   deleteHabit as deleteHabitAction,
   duplicateHabit as duplicateHabitAction,
+  reorderHabits as reorderHabitsAction,
 } from '@/app/actions/habits';
 import { toggleCell as toggleCellAction } from '@/app/actions/cells';
 import { setMental as setMentalAction } from '@/app/actions/mental';
@@ -57,10 +58,14 @@ export default function HabitApp({ year, month, habits, cells, mental, preferenc
     root.style.setProperty('--cell-w', tweaks.density === 'compact' ? '24px' : tweaks.density === 'comfy' ? '34px' : '28px');
   }, [tweaks.accent, tweaks.weekScheme, tweaks.radius, tweaks.density]);
 
-  // Optimistic habit list (for instant deletion)
-  const [optimisticHabits, removeOptimisticHabit] = useOptimistic(
+  type HabitAction = { type: 'remove'; id: string } | { type: 'reorder'; orderedIds: string[] };
+  const [optimisticHabits, dispatchHabit] = useOptimistic(
     habits,
-    (state: Habit[], habitIdToRemove: string) => state.filter((h) => h.id !== habitIdToRemove)
+    (state: Habit[], action: HabitAction) => {
+      if (action.type === 'remove') return state.filter((h) => h.id !== action.id);
+      const map = new Map(state.map((h) => [h.id, h]));
+      return action.orderedIds.map((id) => map.get(id)).filter(Boolean) as Habit[];
+    }
   );
 
   // Optimistic cell toggle
@@ -101,13 +106,20 @@ export default function HabitApp({ year, month, habits, cells, mental, preferenc
   function deleteHabit(habitId: string) {
     if (!confirm('Delete this habit?')) return;
     startTransition(async () => {
-      removeOptimisticHabit(habitId);
+      dispatchHabit({ type: 'remove', id: habitId });
       await deleteHabitAction(habitId);
     });
   }
 
   function duplicateHabit(habitId: string) {
     transition(() => duplicateHabitAction(habitId));
+  }
+
+  function reorderHabits(orderedIds: string[]) {
+    startTransition(async () => {
+      dispatchHabit({ type: 'reorder', orderedIds });
+      await reorderHabitsAction(orderedIds);
+    });
   }
 
   function setMental(day: number, key: 'mood' | 'motivation', val: number) {
@@ -185,6 +197,7 @@ export default function HabitApp({ year, month, habits, cells, mental, preferenc
           onToggleCell={toggleCell} onAddHabit={addHabit}
           onRenameHabit={renameHabit} onSetEmoji={setEmoji}
           onDeleteHabit={deleteHabit} onDuplicateHabit={duplicateHabit}
+          onReorderHabits={reorderHabits}
           showAnalysis={tweaks.showAnalysis} checkStyle={tweaks.checkStyle}
         />
       </div>

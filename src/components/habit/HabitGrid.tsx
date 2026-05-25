@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, FormEvent } from 'react';
+import { useState, useMemo, useCallback, useRef, FormEvent } from 'react';
 import type { Habit, CellMap, Week, CheckStyle } from '@/lib/types';
 import { DAY_SHORT } from '@/lib/constants';
 import { pctColor, getCellDateRelation } from '@/lib/habitUtils';
@@ -22,6 +22,7 @@ interface Props {
   onSetEmoji: (habitId: string, emoji: string) => void;
   onDeleteHabit: (habitId: string) => void;
   onDuplicateHabit: (habitId: string) => void;
+  onReorderHabits: (orderedIds: string[]) => void;
   showAnalysis: boolean;
   checkStyle: CheckStyle;
 }
@@ -29,13 +30,35 @@ interface Props {
 export default function HabitGrid({
   habits, cells, weeks, totalDays, year, month,
   onToggleCell, onAddHabit, onRenameHabit, onSetEmoji, onDeleteHabit, onDuplicateHabit,
-  showAnalysis, checkStyle,
+  onReorderHabits, showAnalysis, checkStyle,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState('');
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; habitId: string } | null>(null);
+
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [overIdx, setOverIdx] = useState<number | null>(null);
+  const dragCounterRef = useRef(0);
+
+  const handleDragStart = useCallback((idx: number, e: React.DragEvent) => {
+    setDragIdx(idx);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(idx));
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    if (dragIdx !== null && overIdx !== null && dragIdx !== overIdx) {
+      const reordered = [...habits];
+      const [moved] = reordered.splice(dragIdx, 1);
+      reordered.splice(overIdx, 0, moved);
+      onReorderHabits(reordered.map((h) => h.id));
+    }
+    setDragIdx(null);
+    setOverIdx(null);
+    dragCounterRef.current = 0;
+  }, [dragIdx, overIdx, habits, onReorderHabits]);
 
   const dailyStats = useMemo(() => {
     const stats: Record<number, { done: number; notDone: number; pct: number }> = {};
@@ -123,6 +146,11 @@ export default function HabitGrid({
             {habits.map((h, hi) => {
               const rowBg = hi % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)';
               const stat = habitStats[h.id];
+              const isDragging = dragIdx === hi;
+              const isOver = overIdx === hi;
+              const dropEdge: 'top' | 'bottom' | null = isOver && dragIdx !== null
+                ? (dragIdx < hi ? 'bottom' : 'top')
+                : null;
               return (
                 <HabitRow
                   key={h.id}
@@ -145,6 +173,12 @@ export default function HabitGrid({
                   onToggleCell={(day) => onToggleCell(h.id, day)}
                   showAnalysis={showAnalysis}
                   stat={stat}
+                  isDragging={isDragging}
+                  dropEdge={dropEdge}
+                  onDragStart={(e) => handleDragStart(hi, e)}
+                  onDragEnd={handleDragEnd}
+                  onDragOver={(e) => { e.preventDefault(); setOverIdx(hi); }}
+                  onDragLeave={() => {}}
                 />
               );
             })}
@@ -226,26 +260,51 @@ export default function HabitGrid({
       <style>{`
         .habit-name-row:hover .del-habit { opacity: 1 !important; }
         .habit-name-row:hover .del-habit:hover { background: rgba(255,255,255,0.08); color: var(--ink); }
+        .habit-name-row:hover .drag-handle { opacity: 1 !important; }
         .auth-field:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 3px rgba(43,212,161,0.12) !important; }
       `}</style>
     </>
   );
 }
 
-function HabitRow({ habit, rowBg, editingId, editValue, onStartEdit, onEditChange, onEditCommit, onEditCancel, onSetEmoji, onDelete, onContextMenu, year, month, weeks, cells, checkStyle, onToggleCell, showAnalysis, stat }: {
+function HabitRow({ habit, rowBg, editingId, editValue, onStartEdit, onEditChange, onEditCommit, onEditCancel, onSetEmoji, onDelete, onContextMenu, year, month, weeks, cells, checkStyle, onToggleCell, showAnalysis, stat, isDragging, dropEdge, onDragStart, onDragEnd, onDragOver, onDragLeave }: {
   habit: Habit; rowBg: string; editingId: string | null; editValue: string;
   onStartEdit: () => void; onEditChange: (v: string) => void; onEditCommit: () => void; onEditCancel: () => void;
   onSetEmoji: (em: string) => void; onDelete: () => void; onContextMenu: (x: number, y: number) => void;
   year: number; month: number;
   weeks: Week[]; cells: CellMap; checkStyle: CheckStyle; onToggleCell: (day: number) => void;
   showAnalysis: boolean; stat: { done: number; pct: number };
+  isDragging: boolean; dropEdge: 'top' | 'bottom' | null;
+  onDragStart: (e: React.DragEvent) => void; onDragEnd: () => void;
+  onDragOver: (e: React.DragEvent) => void; onDragLeave: () => void;
 }) {
   const isEditing = editingId === habit.id;
   return (
     <>
-      <div className="habit-name-row" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', fontSize: 13, background: rowBg, minHeight: 30, position: 'relative' }}
+      <div
+        className="habit-name-row"
+        draggable={!isEditing}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, padding: '0 6px 0 0', fontSize: 13,
+          background: rowBg, minHeight: 30, position: 'relative',
+          opacity: isDragging ? 0.4 : 1,
+          borderTop: dropEdge === 'top' ? '2px solid var(--accent)' : '2px solid transparent',
+          borderBottom: dropEdge === 'bottom' ? '2px solid var(--accent)' : '2px solid transparent',
+          transition: 'opacity 120ms',
+        }}
         onContextMenu={(e) => { e.preventDefault(); onContextMenu(e.clientX, e.clientY); }}
       >
+        <div className="drag-handle" style={{ cursor: 'grab', padding: '0 4px 0 8px', color: 'var(--ink-mute)', display: 'flex', alignItems: 'center', opacity: 0, transition: 'opacity 120ms' }} aria-label="Drag to reorder">
+          <svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor">
+            <circle cx="2" cy="2" r="1.2" /><circle cx="6" cy="2" r="1.2" />
+            <circle cx="2" cy="7" r="1.2" /><circle cx="6" cy="7" r="1.2" />
+            <circle cx="2" cy="12" r="1.2" /><circle cx="6" cy="12" r="1.2" />
+          </svg>
+        </div>
         <EmojiButton emoji={habit.emoji} onPick={onSetEmoji} />
         {isEditing ? (
           <input

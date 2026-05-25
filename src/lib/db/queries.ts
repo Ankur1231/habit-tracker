@@ -102,3 +102,49 @@ export async function getMentalLogsForMonth(year: number, month: number): Promis
   if (error) throw error
   return data ?? []
 }
+
+// ── Job Tracker queries ───────────────────────────────────────────────────────
+
+export interface DbJobColumn {
+  id: string
+  name: string
+  color: string
+  emoji: string
+  sort_order: number
+}
+
+export interface DbJob {
+  id: string
+  column_id: string
+  company: string
+  position: string
+  description: string
+  salary: string
+  location: string
+  url: string
+  tags: string
+  date: string
+}
+
+export async function getJobColumns(): Promise<DbJobColumn[]> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('job_columns')
+    .select('id, name, color, emoji, sort_order')
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true })
+
+  if (error) throw error
+  return data ?? []
+}
+
+export async function getJobs(): Promise<DbJob[]> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('jobs')
+    .select('id, column_id, company, position, description, salary, location, url, tags, date')
+    .order('created_at', { ascending: true })
+
+  if (error) throw error
+  return data ?? []
+}
