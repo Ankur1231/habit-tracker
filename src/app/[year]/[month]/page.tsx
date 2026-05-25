@@ -5,10 +5,12 @@ import {
   getHabitsForMonth,
   getCompletionsForMonth,
   getMentalLogsForMonth,
+  getJobColumns,
+  getJobs,
   profileToPrefs,
 } from '@/lib/db/queries'
-import HabitApp from '@/components/HabitApp'
-import type { CellMap, MentalMap, Habit } from '@/lib/types'
+import AppShell from '@/components/AppShell'
+import type { CellMap, MentalMap, Habit, JobColumn, Job } from '@/lib/types'
 import { TWEAK_DEFAULTS } from '@/lib/constants'
 
 interface Props {
@@ -28,11 +30,13 @@ export default async function MonthPage({ params }: Props) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [profile, dbHabits, completions, mentalLogs] = await Promise.all([
+  const [profile, dbHabits, completions, mentalLogs, dbCols, dbJobs] = await Promise.all([
     getProfile(),
     getHabitsForMonth(year, month),
     getCompletionsForMonth(year, month),
     getMentalLogsForMonth(year, month),
+    getJobColumns(),
+    getJobs(),
   ])
 
   const habits: Habit[] = dbHabits.map((h) => ({
@@ -55,12 +59,29 @@ export default async function MonthPage({ params }: Props) {
     mental[day] = { mood: log.mood, motivation: log.motivation }
   }
 
+  // Transform job data
+  const columns: JobColumn[] = dbCols.map(c => ({
+    id: c.id, name: c.name, color: c.color, emoji: c.emoji,
+  }))
+  const jobs: Job[] = dbJobs.map(j => ({
+    id: j.id,
+    column: j.column_id, // DB field column_id → frontend field column
+    company: j.company,
+    position: j.position,
+    description: j.description,
+    salary: j.salary,
+    location: j.location,
+    url: j.url,
+    tags: j.tags,
+    date: j.date,
+  }))
+
   const preferences = profile ? profileToPrefs(profile) : TWEAK_DEFAULTS
 
   const serverUser = { id: user.id, email: user.email ?? '', name: profile?.name ?? '' }
 
   return (
-    <HabitApp
+    <AppShell
       year={year}
       month={month}
       habits={habits}
@@ -68,6 +89,8 @@ export default async function MonthPage({ params }: Props) {
       mental={mental}
       preferences={preferences}
       user={serverUser}
+      columns={columns}
+      jobs={jobs}
     />
   )
 }

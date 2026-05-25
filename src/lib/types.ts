@@ -57,3 +57,31 @@ export interface TweakValues {
   showArea: boolean;
   radius: number;
 }
+
+// ── Job Tracker ──────────────────────────────────────────────────────────────
+
+export interface Job {
+  id: string;
+  company: string;
+  position: string;
+  description: string;
+  column: string;
+  salary: string;
+  location: string;
+  url: string;
+  tags: string;
+  date: string;
+}
+
+export interface JobColumn {
+  id: string;
+  name: string;
+  color: string;
+  emoji: string;
+}
+
+export interface JobBoard {
+  title: string;
+  columns: JobColumn[];
+  jobs: Job[];
+}
