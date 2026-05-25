@@ -50,6 +50,16 @@ export async function deleteHabit(habitId: string): Promise<void> {
   refresh()
 }
 
+export async function reorderHabits(orderedIds: string[]): Promise<void> {
+  const { supabase, user } = await requireUser()
+
+  const updates = orderedIds.map((id, i) =>
+    supabase.from('habits').update({ sort_order: i }).eq('id', id).eq('user_id', user.id)
+  )
+  await Promise.all(updates)
+  refresh()
+}
+
 export async function duplicateHabit(habitId: string): Promise<void> {
   const { supabase, user } = await requireUser()
 
